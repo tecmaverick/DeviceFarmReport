@@ -337,8 +337,10 @@ def getLastRunArn(runArns, dataset):
     result = []
 
     if runArns and len(runArns) > 0 and lastRun:
-        print "Processing lastrun arn: {}".format(runArns[0])
         result.append(runArns[0])
+
+        if verboseMode:
+            print "Lastrun arn: {}".format(runArns[0])
 
     return result
 
