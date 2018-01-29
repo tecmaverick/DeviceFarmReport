@@ -16,8 +16,9 @@ import time
 directoryName = "output"
 directoryPath = ""
 projectName = None
-reportName = "data.json"
-datetimeFormatString = "%d_%m_%Y__%H_%M_%S_"
+reportName = "report{}.json"
+datetimeFormatString = "_%d_%m_%Y__%H_%M_%S"
+verbose_mode = False
 
 # ----------------------------------------------------------------------------------------------------------------------
 def getProjectArn(projectname, dataset):
@@ -58,10 +59,11 @@ def getRunArns(projectArn, dataset):
                                                            "data": runs, "jobs": {}}
                 result.append(runs["arn"])
 
-    if len(result) > 0:
-        print "retrieved {} run arns".format(len(result))
-    else:
-        print "no run arns found".format(len(result))
+    if verbose_mode:
+        if len(result) > 0:
+            print "retrieved {} run arns".format(len(result))
+        else:
+            print "no run arns found".format(len(result))
 
     return result
 
@@ -83,10 +85,11 @@ def getJobArns(runArns, dataset):
                         {"name": job["name"], "data": job, "suites": {}}
                     result.append(job["arn"])
 
-    if len(result) > 0:
-        print "retrieved {} job arns".format(len(result))
-    else:
-        print "no job arns found".format(len(result))
+    if verbose_mode:
+        if len(result) > 0:
+            print "retrieved {} job arns".format(len(result))
+        else:
+            print "no job arns found".format(len(result))
 
     return result
 
@@ -115,10 +118,11 @@ def getSuitesArns(jobArns, dataset):
                             }
                         result.append(suite["arn"])
 
-    if len(result) > 0:
-        print "retrieved {} suite arns".format(len(result))
-    else:
-        print "no suite arns found".format(len(result))
+    if verbose_mode:
+        if len(result) > 0:
+            print "retrieved {} suite arns".format(len(result))
+        else:
+            print "no suite arns found".format(len(result))
 
     return result
 
@@ -208,10 +212,11 @@ def getTestArns(suiteArns, dataset):
 
                         result.append(test["arn"])
 
-    if len(result) > 0:
-        print "retrieved {} test arns".format(len(result))
-    else:
-        print "no test arns found".format(len(result))
+    if verbose_mode:
+        if len(result) > 0:
+            print "retrieved {} test arns".format(len(result))
+        else:
+            print "no test arns found".format(len(result))
 
     return result
 
@@ -274,10 +279,11 @@ def getArtificatesForTestArn(testArn, artifactType):
             for artifcat in jsondata["artifacts"]:
                 result.append(downloadArtifact(artifcat))
 
-    if len(result) > 0:
-        print "retrieved {} test arns".format(len(result))
-    else:
-        print "no test arns found".format(len(result))
+    if verbose_mode:
+        if len(result) > 0:
+            print "retrieved {} test arns".format(len(result))
+        else:
+            print "no test arns found".format(len(result))
 
     return result
 
@@ -357,7 +363,7 @@ def generateReport(dataset):
 def saveReport(dataset):
     global directoryPath
 
-    dataFilename = time.strftime(datetimeFormatString) + reportName
+    dataFilename = reportName.format(time.strftime(datetimeFormatString))
 
     if dataset:
         if not directoryPath:
@@ -400,7 +406,8 @@ def parseArguments():
     directoryPath = args.outputdirectory
     projectName = args.projectname
 
-    print "projectname:{} \nlastRun: {} \ndirectoryPath:{} ".format(projectName, lastRun, directoryPath)
+    if verbose_mode:
+        print "projectname:{} \nlastRun: {} \ndirectoryPath:{} ".format(projectName, lastRun, directoryPath)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -431,9 +438,6 @@ def projectNameIsValid(projects, projectName):
 
 # ----------------------------------------------------------------------------------------------------------------------
 def validateArgs():
-    global lastRun
-    global directoryPath
-    global projectName
 
     result = False
 
@@ -457,10 +461,6 @@ def validateArgs():
 
 # ----------------------------------------------------------------------------------------------------------------------
 def main():
-    global lastRun
-    global directoryPath
-    global projectName
-
     dataset = {}
 
     parseArguments()
@@ -477,7 +477,6 @@ def main():
         # fileRef = getArtifacts(testArns, dataset)
         result = generateReport(dataset)
         saveReport(result)
-        print "Success"
 
 # **********************************************************************************************************************
 
