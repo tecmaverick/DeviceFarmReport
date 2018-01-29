@@ -1,6 +1,6 @@
 # DeviceFarmReport
 
-The script fecthes DeviceFarm test results and generates a JSON file. 
+The script fetches DeviceFarm test results for a specific project and creates file in JSON format.
 
 Pre-requisites:
 1. AWS CLI installed and configured 
