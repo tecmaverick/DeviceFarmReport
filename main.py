@@ -18,7 +18,7 @@ directoryPath = ""
 projectName = None
 reportName = "report{}.json"
 datetimeFormatString = "_%d_%m_%Y__%H_%M_%S"
-verbose_mode = False
+verboseMode = False
 
 # ----------------------------------------------------------------------------------------------------------------------
 def getProjectArn(projectname, dataset):
@@ -27,7 +27,10 @@ def getProjectArn(projectname, dataset):
     if projectname:
         print "Retrieving project ARN"
         cmd = "aws devicefarm list-projects  --region us-west-2 --query \"projects[?name=='{}']\"".format(projectname)
-        # print cmd
+
+        if verboseMode:
+            print cmd
+
         response = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).stdout.read()
         jsondata = json.loads(response)
 
@@ -49,7 +52,10 @@ def getRunArns(projectArn, dataset):
     if projectArn and len(projectArn) > 0:
         print "Retrieving runs arns"
         cmd = "aws devicefarm list-runs  --arn \"{}\" --region us-west-2".format(projectArn[0])
-        # print cmd
+
+        if verboseMode:
+            print cmd
+
         response = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).stdout.read()
         jsondata = json.loads(response)
 
@@ -59,7 +65,7 @@ def getRunArns(projectArn, dataset):
                                                            "data": runs, "jobs": {}}
                 result.append(runs["arn"])
 
-    if verbose_mode:
+    if verboseMode:
         if len(result) > 0:
             print "retrieved {} run arns".format(len(result))
         else:
@@ -76,7 +82,10 @@ def getJobArns(runArns, dataset):
         print "Retrieving job arns"
         for runArn in runArns:
             cmd = "aws devicefarm list-jobs --region us-west-2  --arn \"{}\"".format(runArn)
-            # print cmd
+
+            if verboseMode:
+                print cmd
+
             response = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).stdout.read()
             jsondata = json.loads(response)
             if "jobs" in jsondata and len(jsondata["jobs"]) > 0:
@@ -85,7 +94,7 @@ def getJobArns(runArns, dataset):
                         {"name": job["name"], "data": job, "suites": {}}
                     result.append(job["arn"])
 
-    if verbose_mode:
+    if verboseMode:
         if len(result) > 0:
             print "retrieved {} job arns".format(len(result))
         else:
@@ -104,7 +113,10 @@ def getSuitesArns(jobArns, dataset):
 
             if runArn:
                 cmd = "aws devicefarm list-suites --region us-west-2  --arn \"{}\"".format(jobArn)
-                # print cmd
+
+                if verboseMode:
+                    print cmd
+
                 response = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).stdout.read()
                 jsondata = json.loads(response)
 
@@ -118,7 +130,7 @@ def getSuitesArns(jobArns, dataset):
                             }
                         result.append(suite["arn"])
 
-    if verbose_mode:
+    if verboseMode:
         if len(result) > 0:
             print "retrieved {} suite arns".format(len(result))
         else:
@@ -197,7 +209,10 @@ def getTestArns(suiteArns, dataset):
 
             if runArn and jobArn:
                 cmd = "aws devicefarm list-tests --region us-west-2  --arn \"{}\"".format(suiteArn)
-                # print cmd
+
+                if verboseMode:
+                    print cmd
+
                 response = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).stdout.read()
                 jsondata = json.loads(response)
 
@@ -212,7 +227,7 @@ def getTestArns(suiteArns, dataset):
 
                         result.append(test["arn"])
 
-    if verbose_mode:
+    if verboseMode:
         if len(result) > 0:
             print "retrieved {} test arns".format(len(result))
         else:
@@ -252,10 +267,19 @@ def getArtifacts(testArns, dataset):
 # ----------------------------------------------------------------------------------------------------------------------
 def createoutputDir(dataset):
 
+    if verboseMode:
+        print "Creating output directory"
+
     directoryPath = os.path.dirname(os.path.abspath(__file__))
     dirPath = os.path.join(directoryPath, directoryName)
 
+    if verboseMode:
+        print "Check directory {} exists".format(dirPath)
+
     if not os.path.exists(dirPath):
+        if verboseMode:
+            print "directory doesn't exist, hence creating directory {}".format(dirPath)
+
         os.makedirs(dirPath)
 
     if dataset:
@@ -272,14 +296,17 @@ def getArtificatesForTestArn(testArn, artifactType):
              artifactType.upper() == "SCREENSHOT"):
         print "Retrieving {} artificats".format(artifactType)
         cmd = "aws devicefarm list-artifacts --region us-west-2  --arn \"{}\" --type {}".format(testArn, artifactType)
-        # print cmd
+
+        if verboseMode:
+            print cmd
+
         response = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).stdout.read()
         jsondata = json.loads(response)
         if "artifacts" in jsondata and len(jsondata["artifacts"]) > 0:
             for artifcat in jsondata["artifacts"]:
                 result.append(downloadArtifact(artifcat))
 
-    if verbose_mode:
+    if verboseMode:
         if len(result) > 0:
             print "retrieved {} test arns".format(len(result))
         else:
@@ -305,15 +332,13 @@ def downloadArtifact(artifact):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-def getLastRunArn(runaArns):
-    result = []
-    global lastRun
+def getLastRunArn(runArns, dataset):
 
-    if runaArns and len(runaArns) > 0 and lastRun:
-        # Fix this
-        print "test"
-    else:
-        result = runaArns
+    result = []
+
+    if runArns and len(runArns) > 0 and lastRun:
+        print "Processing lastrun arn: {}".format(runArns[0])
+        result.append(runArns[0])
 
     return result
 
@@ -379,9 +404,11 @@ def saveReport(dataset):
 
 # ----------------------------------------------------------------------------------------------------------------------
 def parseArguments():
+
     global lastRun
     global directoryPath
     global projectName
+    global verboseMode
 
     usageDoc = "\nGenerates report for every tests in the project \n" + \
                "\tpython main.py ReplaceWithProjectName\n" + \
@@ -399,15 +426,22 @@ def parseArguments():
                         help="only generated report for lastrun arn")
     parser.add_argument("-od", "--outputdirectory",
                         help="The location where the test results are to be stored")
+    parser.add_argument("-v", "--verbose", action='store_true',
+                        help="Enabling verbose mode, outputs statements useful for debugging\\reporting issues.")
 
     args = parser.parse_args()
 
     lastRun = args.lastrun
     directoryPath = args.outputdirectory
     projectName = args.projectname
+    verboseMode = args.verbose
 
-    if verbose_mode:
-        print "projectname:{} \nlastRun: {} \ndirectoryPath:{} ".format(projectName, lastRun, directoryPath)
+    if verboseMode:
+        print "projectname:{} \nlastRun: {} \ndirectoryPath:{} \nVerboseMode: {}".format(
+            projectName,
+            lastRun,
+            directoryPath,
+            verboseMode)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -471,6 +505,11 @@ def main():
         createoutputDir(dataset)
         prjArn = getProjectArn(projectName, dataset)
         runaArns = getRunArns(prjArn, dataset)
+
+        #Retrieve only the last run arn
+        if lastRun:
+            runaArns = getLastRunArn(runaArns, dataset)
+
         jobArns = getJobArns(runaArns, dataset)
         sutieArns = getSuitesArns(jobArns, dataset)
         testArns = getTestArns(sutieArns, dataset)
