@@ -297,8 +297,8 @@ def getArtifactDir(projectName):
 # ----------------------------------------------------------------------------------------------------------------------
 def createDirs(projectName):
 
-    createDirIfNotExist(getProjectDirectoryPath())
     createDirIfNotExist(getOutputDirectoryPath())
+    createDirIfNotExist(getProjectDirectoryPath())
     createDirIfNotExist(getArtifactDir(projectName))
 
 # ----------------------------------------------------------------------------------------------------------------------
