@@ -1,4 +1,4 @@
-#Author: AbrahamJP
+#Author: Abraham
 #Date: 29th Jan 2018
 #Version: 0.1 Beta
 
@@ -13,8 +13,13 @@ import time
 
 # ----------------------------------------------------------------------------------------------------------------------
 
+downloadArtifacts = False
+artifactDirectoryName = "artifacts"
+artifactDirectoryPath = ""
+
 directoryName = "output"
-directoryPath = ""
+outputDirectoryPath = ""
+
 projectName = None
 reportName = "report{}.json"
 datetimeFormatString = "_%d_%m_%Y__%H_%M_%S"
@@ -64,6 +69,10 @@ def getRunArns(projectArn, dataset):
                 dataset["project"]["runs"][runs["arn"]] = {"name": runs["name"], "created": runs["created"],
                                                            "data": runs, "jobs": {}}
                 result.append(runs["arn"])
+
+                #The first entry will be the lastRun arn, hence exit the loop after the first iteration
+                if lastRun:
+                    break;
 
     if verboseMode:
         if len(result) > 0:
@@ -240,21 +249,27 @@ def getTestArns(suiteArns, dataset):
 def getArtifacts(testArns, dataset):
     result = {}
 
-    if testArns and len(testArns) > 0:
+    if testArns and len(testArns) > 0 and downloadArtifacts:
         for testArn in testArns:
             runArn = getRunArnFromTestArn(testArn)
             jobArn = getJobArnFromTestArn(testArn)
             suiteArn = getSuiteArnFromTestArn(testArn)
 
+            params = {"runArn": runArn,
+                    "jobArn": jobArn,
+                    "suiteArn": suiteArn,
+                    "testArn": testArn,
+                    "dataset": dataset}
+
             ref = dataset["project"]["runs"][runArn]["jobs"][jobArn]["suites"][suiteArn]["tests"][testArn]
 
-            logFileRef = getArtificatesForTestArn(testArn, "LOG")
-            fileRef = getArtificatesForTestArn(testArn, "FILE")
-            scrShotRef = getArtificatesForTestArn(testArn, "SCREENSHOT")
+            logFileRef = getArtificatesForTestArn(params, "LOG")
+            fileRef = getArtificatesForTestArn(params, "FILE")
+            scrShotRef = getArtificatesForTestArn(params, "SCREENSHOT")
 
             ref["artifacts"]["LOG"] = logFileRef
-            ref["artifacts"]["LOG"] = fileRef
-            ref["artifacts"]["LOG"] = scrShotRef
+            ref["artifacts"]["FILE"] = fileRef
+            ref["artifacts"]["SCREENSHOT"] = scrShotRef
 
             result = {}
             result["log"] = logFileRef
@@ -263,18 +278,58 @@ def getArtifacts(testArns, dataset):
 
     return result
 
+# ----------------------------------------------------------------------------------------------------------------------
+def getArtifactDir(projectName):
+
+    dirPath = None
+
+    if verboseMode:
+        print "Getting artifacts directory"
+
+    if projectName:
+        dirPath = os.path.join(getOutputDirectoryPath(), projectName, artifactDirectoryName)
+    else:
+        if verboseMode:
+            print "Getting artifacts directory failed as projectName is not provided"
+
+    return dirPath
 
 # ----------------------------------------------------------------------------------------------------------------------
-def createoutputDir(dataset):
+def createDirs(projectName):
+
+    createDirIfNotExist(getProjectDirectoryPath())
+    createDirIfNotExist(getOutputDirectoryPath())
+    createDirIfNotExist(getArtifactDir(projectName))
+
+# ----------------------------------------------------------------------------------------------------------------------
+def getOutputDirectoryPath():
+    global outputDirectoryPath
 
     if verboseMode:
-        print "Creating output directory"
+        print "Getting output directory"
 
-    directoryPath = os.path.dirname(os.path.abspath(__file__))
-    dirPath = os.path.join(directoryPath, directoryName)
+    #If the outputDirectoryPath is empty return the default path
+    if not outputDirectoryPath:
+        outputDirectoryPath = os.path.join(os.getcwd(), directoryName)
+
+
+    return outputDirectoryPath
+
+# ----------------------------------------------------------------------------------------------------------------------
+def getProjectDirectoryPath():
 
     if verboseMode:
-        print "Check directory {} exists".format(dirPath)
+        print "Getting project directory"
+
+    return os.path.join(getOutputDirectoryPath(), projectName)
+
+# ----------------------------------------------------------------------------------------------------------------------
+def createDirIfNotExist(dirPath):
+
+    result = False
+
+    if verboseMode:
+        print "Checking directory exists: {}".format(dirPath)
 
     if not os.path.exists(dirPath):
         if verboseMode:
@@ -282,29 +337,61 @@ def createoutputDir(dataset):
 
         os.makedirs(dirPath)
 
-    if dataset:
-        dataset["outputdir"] = dirPath
+        #Set to true if the directory was created
+        result = True
 
+    return result
+# ----------------------------------------------------------------------------------------------------------------------
+
+def getArtifactSavePath(params, artifactType):
+    if params and artifactType:
+
+        dataset = params["dataset"]
+        runArn = params["runArn"]
+        jobArn = params["jobArn"]
+        suiteArn = params["suiteArn"]
+        testArn = params["testArn"]
+
+
+        runName =  dataset["project"]["runs"][runArn]["name"]
+        runCreatedDT = dataset["project"]["runs"][runArn]["created"]
+        runCreatedDT = str(datetime.datetime.fromtimestamp(runCreatedDT).strftime(datetimeFormatString))
+        runDirName = runName + "_" +  runCreatedDT
+
+        deviceName = dataset["project"]["runs"][runArn]["jobs"][jobArn]["name"]
+        deviceOSName = dataset["project"]["runs"][runArn]["jobs"][jobArn]["data"]["device"]["os"]
+        deviceDirName = deviceName + deviceOSName
+
+        suiteName = dataset["project"]["runs"][runArn]["jobs"][jobArn]["suites"][suiteArn]["name"]
+        testName = dataset["project"]["runs"][runArn]["jobs"][jobArn]["suites"][suiteArn]["tests"][testArn]["name"]
+
+        dirPath = os.path.join(getArtifactDir(projectName), runDirName, deviceDirName, suiteName, testName)
+
+        # ref = dataset["project"]["runs"][runArn]["jobs"][jobArn]["suites"][suiteArn]["tests"][testArn]
+
+    return  dirPath
 
 # ----------------------------------------------------------------------------------------------------------------------
-def getArtificatesForTestArn(testArn, artifactType):
+def getArtificatesForTestArn(params, artifactType):
     result = []
-    if testArn and len(testArn) > 0 and \
+
+    if params and len(params["testArn"]) > 0 and \
             artifactType and \
             (artifactType.upper() == "LOG" or
              artifactType.upper() == "FILE" or
              artifactType.upper() == "SCREENSHOT"):
         print "Retrieving {} artificats".format(artifactType)
-        cmd = "aws devicefarm list-artifacts --region us-west-2  --arn \"{}\" --type {}".format(testArn, artifactType)
+        cmd = "aws devicefarm list-artifacts --region us-west-2  --arn \"{}\" --type {}".format(params["testArn"], artifactType)
 
         if verboseMode:
             print cmd
 
+        savePath = getArtifactSavePath(params, artifactType)
         response = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).stdout.read()
         jsondata = json.loads(response)
         if "artifacts" in jsondata and len(jsondata["artifacts"]) > 0:
             for artifcat in jsondata["artifacts"]:
-                result.append(downloadArtifact(artifcat))
+                result.append(downloadArtifact(savePath, artifcat))
 
     if verboseMode:
         if len(result) > 0:
@@ -316,34 +403,21 @@ def getArtificatesForTestArn(testArn, artifactType):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-def downloadArtifact(artifact):
+def downloadArtifact(savePath, artifact):
     result = None
     if artifact and "url" in artifact:
         print "Download artifact {}".format(artifact["url"])
         response = urllib2.urlopen(artifact["url"])
         data = response.read()
 
+        createDirIfNotExist(savePath)
         savefilename = artifact["name"] + "." + artifact["extension"]
-        filehandle = open(savefilename, "w")
+        absoluteFilename = os.path.join(savePath, savefilename)
+        filehandle = open(absoluteFilename, "w")
         filehandle.write(data)
         filehandle.close()
 
     return result
-
-
-# ----------------------------------------------------------------------------------------------------------------------
-def getLastRunArn(runArns, dataset):
-
-    result = []
-
-    if runArns and len(runArns) > 0 and lastRun:
-        result.append(runArns[0])
-
-        if verboseMode:
-            print "Lastrun arn: {}".format(runArns[0])
-
-    return result
-
 
 # ----------------------------------------------------------------------------------------------------------------------
 def generateReport(dataset):
@@ -388,15 +462,11 @@ def generateReport(dataset):
 
 # ----------------------------------------------------------------------------------------------------------------------
 def saveReport(dataset):
-    global directoryPath
 
     dataFilename = reportName.format(time.strftime(datetimeFormatString))
 
     if dataset:
-        if not directoryPath:
-            directoryPath = os.path.join(os.path.dirname(os.path.abspath(__file__)), directoryName)
-
-        absoulteFilePath = os.path.join(directoryPath, dataFilename)
+        absoulteFilePath = os.path.join(getProjectDirectoryPath(), dataFilename)
 
         filehandle = open(absoulteFilePath, "w")
         filehandle.write(json.dumps(dataset))
@@ -408,8 +478,9 @@ def saveReport(dataset):
 def parseArguments():
 
     global lastRun
-    global directoryPath
+    global outputDirectoryPath
     global projectName
+    global downloadArtifacts
     global verboseMode
 
     usageDoc = "\nGenerates report for every tests in the project \n" + \
@@ -428,22 +499,30 @@ def parseArguments():
                         help="only generated report for lastrun arn")
     parser.add_argument("-od", "--outputdirectory",
                         help="The location where the test results are to be stored")
+    parser.add_argument("-da", "--downloadartifacts", action='store_true',
+                        help="Downloads test artifacts like logs, Screenshots, ")
     parser.add_argument("-v", "--verbose", action='store_true',
                         help="Enabling verbose mode, outputs statements useful for debugging\\reporting issues.")
 
     args = parser.parse_args()
 
     lastRun = args.lastrun
-    directoryPath = args.outputdirectory
+    outputDirectoryPath = args.outputdirectory
     projectName = args.projectname
+    downloadArtifacts = args.downloadartifacts
     verboseMode = args.verbose
 
     if verboseMode:
-        print "projectname:{} \nlastRun: {} \ndirectoryPath:{} \nVerboseMode: {}".format(
+        print "projectname:{} " \
+              "\nlastRun: {} " \
+              "\ndirectoryPath:{} " \
+              "\nVerboseMode: {} " \
+              "\nDownloadArtifacts: {}".format(
             projectName,
             lastRun,
-            directoryPath,
-            verboseMode)
+            outputDirectoryPath,
+            verboseMode,
+            downloadArtifacts)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -488,10 +567,10 @@ def validateArgs():
             print prjName
 
     # Validate outout directory passed in as parameter
-    if result and directoryPath:
-        result = os.path.exists(directoryPath)
+    if result and outputDirectoryPath:
+        result = os.path.exists(outputDirectoryPath)
         if not result:
-            print "Invalid directory path {}\n".format(directoryPath)
+            print "Invalid directory path {}\n".format(outputDirectoryPath)
 
     return result
 
@@ -504,18 +583,13 @@ def main():
     if validateArgs():
         print "Exporting logs for project: {}".format(projectName)
 
-        createoutputDir(dataset)
+        createDirs(projectName)
         prjArn = getProjectArn(projectName, dataset)
         runaArns = getRunArns(prjArn, dataset)
-
-        #Retrieve only the last run arn
-        if lastRun:
-            runaArns = getLastRunArn(runaArns, dataset)
-
         jobArns = getJobArns(runaArns, dataset)
         sutieArns = getSuitesArns(jobArns, dataset)
         testArns = getTestArns(sutieArns, dataset)
-        # fileRef = getArtifacts(testArns, dataset)
+        fileRef = getArtifacts(testArns, dataset)
         result = generateReport(dataset)
         saveReport(result)
 
@@ -524,7 +598,3 @@ def main():
 main()
 
 # **********************************************************************************************************************
-
-
-
-
